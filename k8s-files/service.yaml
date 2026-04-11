@@ -1,0 +1,15 @@
+apiVersion: v1 
+kind: Service 
+metadata:
+  name: verification-service 
+  namespace: pc-app
+spec:
+  selector:
+    app: verification-service 
+  ports:
+    - targetPort: 8000
+      port: 8000
+  type: ClusterIP
+    
+  
+
