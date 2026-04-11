@@ -1,0 +1,89 @@
+name: Build
+ 
+on:
+  push:
+    branches:
+      - main
+ 
+jobs:
+  build:
+    name: Build and analyze
+    runs-on: ubuntu-latest
+   
+    steps:
+ 
+      - name: Clone to VM
+        uses: actions/checkout@v4
+     
+     
+      - name: Snyk Scan
+        uses: snyk/actions/python@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: monitor
+ 
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+ 
+      - name: Quality Gate Check
+        uses: SonarSource/sonarqube-quality-gate-action@v1
+        id: qualitygate
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+ 
+     
+      - name: Setup Docker
+        uses: docker/setup-buildx-action@v3
+ 
+      - name: Build Image
+        run: |
+          docker build -t ${{ env.IMAGE_NAME }} .
+        env:
+          IMAGE_NAME: auth_service
+ 
+      - name: Trivy Install
+        run: |
+          sudo apt update
+          sudo apt install trivy -y
+      - name: Scan Image
+        run: trivy image --severity HIGH,CRITICAL ${{ env.IMAGE_NAME }}
+        env:
+          IMAGE_NAME: auth_service  
+ 
+      - name: Send Success Email
+        if: success()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "Build Passed"
+          body: "No vulnerabilities found."
+          to: ${{ secrets.EMAIL_USERNAME }}
+          from: GitHub Actions
+ 
+      - name: Send Failure Email
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "Build Failed"
+          body: "Quality Gate failed. Check SonarQube."
+          to: ${{ secrets.EMAIL_USERNAME }}  
+          from: GitHub Actions
+ 
+      # If you wish to fail your job when the Quality Gate is red, uncomment the
+      # following lines. This would typically be used to fail a deployment.
+      # - uses: SonarSource/sonarqube-quality-gate-action@v1
+      #   timeout-minutes: 5
+      #   env:
+      #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
